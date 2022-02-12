@@ -1,0 +1,14 @@
+version: "3.9"
+services:
+  project-name:
+    build: . # Where are the files located
+    
+    # Create a link between local and container paths
+    # When making changes locally you don't have to rebuild the container
+    volumes:
+      - .:/home/deploy/app/
+      - ~/.ssh:/root/.ssh # SSH keys for git
+    ports: 
+      - 3000:3000 # Default port for local testing
+    env_file:
+      - .env

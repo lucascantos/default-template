@@ -1,0 +1,70 @@
+service: project-name
+app: project-name
+
+provider:
+  name: aws
+  runtime: python3.8
+  region: ${opt:region, 'eu-central-1'}
+  stage: ${opt:stage, 'dev'}
+  # logRetentionInDays: 30
+  environment:
+    LOG_LEVEL: ${opt:LOG_LEVEL, 'INFO'}
+    STAGE: ${sls:stage}
+    # DOMAIN: ${self:custom.customDomain.domainName}
+
+custom:
+  ## Custom domain variables
+  # apiDomain: mydomain.com
+  # DOMAIN:
+  #   dev: dev-${self:custom.apiDomain}
+  #   preview: preview-${env:CI_PIPELINE_IID, ''}-${self:custom.apiDomain}
+  #   prod: ${self:custom.apiDomain}
+  #   local: localhost
+  # customDomain:
+  #   domainName: ${self:custom.DOMAIN.${env:DOMAIN_TARGET_TYPE, 'local'}}
+  #   stage: ${sls:stage}
+  #   createRoute53Record: true
+  #   endpointType: regional
+  #   certificateRegion: ${opt:region, 'eu-central-1'}
+  #   basePath: ''
+  #   route53Params:
+  #     routingPolicy: latency
+
+  ## Prunning of older deployment versions
+  prune:
+    automatic: true
+    number: 5
+  ## CORS headers
+  corsAllowedHeaders:
+  - Content-Type
+  - X-Amz-Date
+  - Authorization
+  - X-Api-Key
+  - X-Amz-Security-Token
+  - X-Amz-User-Agent
+  - X-Request-Id
+
+plugins:
+# - serverless-domain-manager
+- serverless-prune-plugin
+- serverless-python-requirements
+- serverless-offline
+
+functions:
+  hello:
+    handler: handler.hello
+    events:
+    - http:
+        path: /
+        method: get
+      cors:
+        origin: '*'
+        headers: ${self:custom.corsAllowedHeaders}
+
+package:
+  exclude:
+  - node_modules/**
+  - env/**
+  - package.json
+  - yarn.lock
+  - requirements.txt

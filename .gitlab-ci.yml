@@ -1,0 +1,137 @@
+image: nikolaik/python-nodejs:python3.8-nodejs14
+
+variables:
+  SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar" # Defines the location of the analysis task cache
+  GIT_DEPTH: "0" # Tells git to fetch all the branches of the project, required by the analysis task
+
+.install_serverless: &install-serverless
+  before_script:
+    - yarn global add serverless --prefix /usr/local
+    - yarn
+
+include: # Workflow rules to prevent duplicate deployment
+  - template: 'Workflows/Branch-Pipelines.gitlab-ci.yml'
+
+stages:
+  - build
+  - test
+  - analysis
+  - preview-deploy
+  - deploy
+  - confidence-check
+
+check-formatting:       # The code must be formatted in order to be put into production
+  image: python:3.8-alpine
+  stage: test
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH # On master branch
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" # On PR
+    - if: $CI_COMMIT_BRANCH == "dev"
+      allow_failure: true
+  before_script:
+    - apk --no-cache add py3-pip python3-dev gcc linux-headers musl-dev libffi-dev openssl-dev git
+    - pip3 install -r requirements-lint.txt
+  script:
+    - echo "Checking Black..."
+    - black --check .
+
+unit-tests:
+  image: python:3.8-alpine
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "dev"
+      allow_failure: true
+  before_script:
+    - apk --no-cache add py3-pip python3-dev gcc linux-headers musl-dev libffi-dev openssl-dev git
+    - pip3 install -r requirements-test.txt
+  script:
+    - coverage erase
+    - coverage run --branch --source=src -m pytest tests -vv
+    - coverage report
+    - coverage xml -i
+  artifacts:
+    paths:
+      - coverage.xml # will be used to sonar
+    reports:
+      cobertura: coverage.xml
+
+sonarcloud-check:
+  image:
+    name: sonarsource/sonar-scanner-cli:latest
+    entrypoint: [""]
+  stage: analysis # It has to be on a differet stage that test in order to grab the artifacts
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH # On master branch
+    - if: $CI_COMMIT_BRANCH == "dev"
+      allow_failure: true
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  dependencies:
+    - unit-tests
+  script:
+    - sonar-scanner # Script already on image
+
+development-deploy:
+  <<: *install-serverless
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+  variables:
+    LOG_LEVEL: "DEBUG" 
+    DOMAIN_TARGET_TYPE: "dev"  # This is not related to the --stage
+  script:
+    # - serverless create_domain --stage dev
+    - serverless deploy --stage dev --verbose
+    - serverless test --stage dev
+  environment:
+    name: production
+
+preview-deploy:
+  <<: *install-serverless
+  stage: preview-deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH # Automatic deploy if merge + Master
+  variables:
+    DOMAIN_TARGET_TYPE: "preview"
+  script:
+    # - serverless create_domain --stage preview-${CI_MERGE_REQUEST_IID}
+    - serverless deploy --stage preview-${CI_MERGE_REQUEST_IID}
+  environment:
+    name: development
+    on_stop: stop_preview_deployment
+
+stop_preview_deployment:
+  <<: *install-serverless
+  stage: preview-deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH # Automatic deploy if merge + Master
+      when: manual
+  variables:
+    DOMAIN_TARGET_TYPE: "preview"
+  script:
+    # - serverless delete_domain --stage preview-${CI_MERGE_REQUEST_IID}
+    - serverless remove --stage preview-${CI_MERGE_REQUEST_IID}
+  environment:
+    name: development
+    action: stop
+
+production-deploy:
+  <<: *install-serverless
+  stage: deploy
+  allow_failure: false
+  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH # Automatic deploy if merge + Master
+  variables:
+    DOMAIN_TARGET_TYPE: "prod" # This is not related to the --stage
+  script:
+    # - serverless create_domain --stage prod
+    - serverless deploy --stage prod --verbose
+    - serverless test --stage prod
+  environment:
+    name: production
+
+

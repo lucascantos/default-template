@@ -1,0 +1,10 @@
+- name: Send Hello
+  endpoint:
+    method: GET
+    path: /
+  ## If querystring params are needed 
+  # request: 
+  #   form:
+  #     term: 6
+  response:
+    status: 200

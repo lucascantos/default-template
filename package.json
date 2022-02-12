@@ -1,0 +1,21 @@
+{
+  "name": "product-name",
+  "version": "1.0.0",
+  "description": "Api for ",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "author": "Lucas Cantos",
+  "license": "MIT",
+  "homepage": "#readme",
+  "dependencies": {
+    "serverless-domain-manager": "^5.2.0",
+    "serverless-prune-plugin": "^2.0.1",
+    "serverless-python-requirements": "^5.2.2"
+  },
+  "devDependencies": {
+    "serverless-dotenv-plugin": "^3.10.0",
+    "serverless-offline": "^8.3.1"
+  }
+}
